@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple To-Do App</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#ffffff; --accent:#6b5ef5; --muted:#6b7280;
+      --success:#10b981; --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
+      background:linear-gradient(180deg,var(--bg),#eef2ff);
+      color:#0f172a; display:flex; align-items:center; justify-content:center;
+      min-height:100vh; padding:24px;
+    }
+    .app{
+      width:100%; max-width:760px; background:var(--card);
+      border-radius:14px; box-shadow:0 8px 30px rgba(17,24,39,0.08);
+      overflow:hidden;
+    }
+    header{
+      padding:20px 24px; display:flex; align-items:center; gap:12px;
+      border-bottom:1px solid #eef2ff;
+    }
+    .logo{
+      width:48px; height:48px; display:grid; place-items:center;
+      background:linear-gradient(135deg,var(--accent),#8b5cf6);
+      color:white; font-weight:700; border-radius:10px; font-size:18px;
+    }
+    h1{margin:0; font-size:18px}
+    .subtitle{color:var(--muted); font-size:13px; margin-top:2px}
+    main{padding:20px 24px}
+    form{display:flex; gap:10px; align-items:center}
+    input[type="text"]{
+      flex:1; padding:10px 12px; border-radius:10px; border:1px solid #e6e9f2;
+      font-size:15px; outline:none;
+    }
+    button{
+      background:var(--accent); color:white; border:0; padding:10px 14px;
+      border-radius:10px; cursor:pointer; font-weight:600;
+    }
+    .controls{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap}
+    .chip{
+      background:#f3f4ff; border-radius:999px; padding:6px 10px; font-size:13px;
+      cursor:pointer; border:1px solid transparent;
+    }
+    .chip.active{background:var(--accent); color:white; border-color:rgba(0,0,0,0.06)}
+    ul.tasks{list-style:none; margin:12px 0 0; padding:0; display:grid; gap:8px}
+    li.task{
+      display:flex; align-items:center; gap:10px; padding:12px;
+      border-radius:10px; background:linear-gradient(180deg,#fff,#fbfbff);
+      border:1px solid #eef2ff;
+    }
+    .task .title{flex:1}
+    .task.done .title{text-decoration:line-through; color:var(--muted)}
+    .task button.icon{background:transparent; border:0; cursor:pointer; padding:6px}
+    .meta{font-size:12px; color:var(--muted)}
+    footer{padding:14px 24px; border-top:1px solid #eef2ff; display:flex; justify-content:space-between; align-items:center;}
+    .empty{color:var(--muted); text-align:center; padding:20px 0;}
+    @media (max-width:520px){
+      header{padding:16px} main{padding:16px} footer{padding:12px}
+    }
+  </style>
+</head>
+<body>
+  <section class="app" aria-labelledby="app-title">
+    <header>
+      <div class="logo" aria-hidden>TD</div>
+      <div>
+        <h1 id="app-title">Simple To-Do</h1>
+        <div class="subtitle">Small, fast, and stores tasks locally</div>
+      </div>
+    </header>
+
+    <main>
+      <form id="addForm" aria-label="Add task">
+        <input id="taskInput" type="text" placeholder="Add a new task (press Enter or Add)" autocomplete="off" />
+        <button id="addBtn" type="submit" aria-label="Add task">Add</button>
+      </form>
+
+      <div class="controls" role="tablist" aria-label="Filter tasks">
+        <button class="chip active" data-filter="all" role="tab" aria-selected="true">All</button>
+        <button class="chip" data-filter="active" role="tab">Active</button>
+        <button class="chip" data-filter="done" role="tab">Done</button>
+        <button class="chip" id="clearDone">Clear Done</button>
+      </div>
+
+      <ul id="tasks" class="tasks" aria-live="polite"></ul>
+      <div id="empty" class="empty" hidden>No tasks yet — add your first task ✨</div>
+    </main>
+
+    <footer>
+      <div class="meta" id="count">0 tasks</div>
+      <div>
+        <button class="chip" id="export">Export</button>
+        <button class="chip" id="import">Import</button>
+      </div>
+    </footer>
+  </section>
+
+  <script>
+    // Simple To-Do app (vanilla JS + localStorage)
+    const STORAGE_KEY = 'simple_todo_v1';
+    const form = document.getElementById('addForm');
+    const input = document.getElementById('taskInput');
+    const tasksEl = document.getElementById('tasks');
+    const emptyEl = document.getElementById('empty');
+    const countEl = document.getElementById('count');
+    const chips = document.querySelectorAll('.chip[data-filter]');
+    let filter = 'all';
+
+    let tasks = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); render(); }
+
+    function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+    function addTask(text){
+      if(!text.trim()) return;
+      tasks.unshift({ id: uid(), text: text.trim(), done:false, added: new Date().toISOString() });
+      save();
+      input.value = '';
+      input.focus();
+    }
+
+    function toggleDone(id){
+      const t = tasks.find(x=>x.id===id);
+      if(t) t.done = !t.done;
+      save();
+    }
+
+    function removeTask(id){
+      tasks = tasks.filter(x=>x.id!==id);
+      save();
+    }
+
+    function clearDone(){
+      tasks = tasks.filter(t => !t.done);
+      save();
+    }
+
+    function render(){
+      // Filtering
+      const visible = tasks.filter(t => filter === 'all' ? true : filter === 'done' ? t.done : !t.done);
+      tasksEl.innerHTML = '';
+      if(visible.length === 0){
+        emptyEl.hidden = tasks.length !== 0; // show "empty" only when overall empty, else hide
+        // if there are tasks but none in filter, show a friendly message
+        if(tasks.length !== 0 && filter !== 'all') {
+          tasksEl.innerHTML = '<li class="empty">No tasks for this filter.</li>';
+        }
+      } else {
+        emptyEl.hidden = true;
+        for(const t of visible){
+          const li = document.createElement('li');
+          li.className = 'task' + (t.done ? ' done' : '');
+          li.innerHTML = `
+            <button class="icon" aria-label="${t.done ? 'Mark as active' : 'Mark as done'}" data-action="toggle" data-id="${t.id}">
+              ${t.done ? '◼' : '◻'}
+            </button>
+            <div class="title">${escapeHtml(t.text)}</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <small class="meta">${new Date(t.added).toLocaleString()}</small>
+              <button class="icon" aria-label="Delete" data-action="del" data-id="${t.id}">✖</button>
+            </div>
+          `;
+          tasksEl.appendChild(li);
+        }
+      }
+      countEl.textContent = `${tasks.length} task${tasks.length === 1 ? '' : 's'}`;
+      // update chips active state
+      chips.forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
+    }
+
+    // Basic XSS-safe text
+    function escapeHtml(s){ return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+    // Event handlers
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      addTask(input.value);
+    });
+
+    tasksEl.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-action]');
+      if(!btn) return;
+      const id = btn.dataset.id;
+      if(btn.dataset.action === 'toggle') toggleDone(id);
+      if(btn.dataset.action === 'del') {
+        if(confirm('Delete this task?')) removeTask(id);
+      }
+    });
+
+    document.getElementById('clearDone').addEventListener('click', () => {
+      if(confirm('Remove all completed tasks?')) clearDone();
+    });
+
+    document.getElementById('export').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(tasks, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'tasks.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('import').addEventListener('click', async () => {
+      const inputFile = document.createElement('input');
+      inputFile.type = 'file'; inputFile.accept = 'application/json';
+      inputFile.onchange = () => {
+        const f = inputFile.files?.[0];
+        if(!f) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            if(Array.isArray(data)){
+              // basic validation & merge
+              const validated = data.filter(d => d && typeof d.text === 'string').map(d => ({
+                id: d.id || uid(),
+                text: d.text,
+                done: !!d.done,
+                added: d.added || new Date().toISOString()
+              }));
+              tasks = [...validated, ...tasks];
+              save();
+              alert('Imported tasks.');
+            } else alert('Invalid file format.');
+          } catch(err){ alert('Could not parse file.'); }
+        };
+        reader.readAsText(f);
+      };
+      inputFile.click();
+    });
+
+    // Filter chips
+    chips.forEach(c => c.addEventListener('click', () => {
+      filter = c.dataset.filter;
+      render();
+    }));
+
+    // initial render
+    render();
+  </script>
+</body>
+</html>
+
